@@ -17,7 +17,7 @@ The documented engine is vLLM **0.27.1**. The baseline configuration measured he
 | Weight format | AWQ (`compressed-tensors`) |
 | Engine | vLLM 0.27.1 |
 | Context length | 131072 tokens |
-| Max concurrent sequences | 4 (`--max-num-seqs 4`) |
+| Max concurrent sequences | 8 (`--max-num-seqs 8`) |
 | Max batched tokens | 4096 (`--max-num-batched-tokens 4096`, BTOK=4096) |
 | GPU memory utilization | 0.70 |
 | MTP / speculative decoding | Off (baseline) |
@@ -69,7 +69,7 @@ vllm serve <MODEL_DIR> \
   --tensor-parallel-size 2 \
   --max-model-len 131072 \
   --gpu-memory-utilization 0.70 \
-  --max-num-seqs 4 \
+  --max-num-seqs 8 \
   --max-num-batched-tokens 4096 \
   --quantization compressed-tensors \
   --default-chat-template-kwargs '{"enable_thinking":false}' \
@@ -82,7 +82,7 @@ Fixed baseline flags for comparisons with the measurements below:
 
 - TP=2
 - `max-model-len=131072`
-- `max-num-seqs=4`
+- `max-num-seqs=8`
 - `max-num-batched-tokens=4096` (BTOK=4096)
 - MTP off (no `--speculative-config` / no draft model)
 
@@ -122,7 +122,76 @@ These are observed results from the 2026-08-31 benchmark wave, not vendor projec
 
 Do not compute speedup ratios between these two methodologies.
 
-### Throughput (2026-08-31, baseline, MTP off)
+### Practical setting: HTTP C8, active sequence 8 (2026-08-31, Issue #97 confirmed)
+
+| Item | Value |
+|---|---|
+| Model | Qwen3.8-27B Abliterated AWQ |
+| Engine | vLLM 0.27.1 |
+| Hardware | 2x RTX 3090 24GB, TP=2 |
+| MTP | Off |
+| Context length | 131072 |
+| `max-num-seqs` | 8 |
+| `max-num-batched-tokens` | 4096 |
+| KV cache | Default (`auto`) |
+
+| Metric | Methodology | Result |
+|---|---|---:|
+| HTTP effective total throughput | HTTP C8 wave wall aggregate | **250.957 tok/s** |
+| Individual generation speed | C8 median pure decode per request | **36.350 tok/s** |
+
+The launch flag `--max-num-seqs 8` corresponds to this setting. Even when more HTTP requests are admitted, active GPU sequences do not exceed 8; additional requests queue until a sequence slot frees.
+
+### Maximum explored HTTP admission: C96 through C192 (2026-09-01, Issue #128 confirmed)
+
+Fixed baseline: same model/engine/hardware as above, `max-num-seqs=8`, `max-num-batched-tokens=4096`, MTP off, ctx=131072, output 512 tokens per call. Each point: warmup 1 + formal 3 waves.
+
+| HTTP C | All calls / formal | HTTP effective total (median tok/s) | Pure decode (median tok/s) | Formal batch TTFT (median s) | Max TTFT (s) | Active / waiting peak | Verdict |
+|---:|---:|---:|---:|---:|---:|---|---|
+| 96 | 384 / 288 | 270.219 | 34.866 | 74.204 | 154.077 | 8 / 88 | PASS |
+| 128 | 512 / 384 | 271.100 | 34.822 | 98.411 | 204.560 | 8 / 120 | PASS |
+| 192 | 768 / 576 | **272.467** | 34.804 | 148.537 | 306.113 | 8 / 184 | PASS — explored upper bound |
+
+All calls returned HTTP 200 with zero client errors at every point. C192 completed warmup **768/768** and formal **576/576** calls successfully. C192 is the **maximum HTTP admission explored** in this ladder; it is not a proven implementation ceiling and the true admission failure point was not reached. Active GPU sequences remained capped at 8 at every point; up to 184 requests were waiting at C192. Concurrency above C192 (for example C256) was not measured. C192 does **not** mean 192 simultaneous GPU decode streams.
+
+At all points: KV cache peak 13.91%, minimum GPU free memory 7687 MiB, no swap growth, and no HTTP/client/socket/FD/OOM/CUDA/NCCL/GPU errors were observed.
+
+Full per-point data: [`data/http_concurrency_ladder_issue128_20260901.json`](data/http_concurrency_ladder_issue128_20260901.json).
+
+### Historical measurement: C12 through C64 ladder (2026-09-01, Issue #109 — superseded by Issue #128)
+
+An earlier ladder explored HTTP admission from C12 through C64 before the C96–C192 extension in Issue #128. These values are **historical** and superseded by the C192 confirmation above; do not treat C64 as the current explored upper bound.
+
+| HTTP C | Formal calls | HTTP effective total (median tok/s) | Pure decode (median tok/s) | Formal batch TTFT (median s) | Max TTFT (s) | Active / waiting peak | Verdict |
+|---:|---:|---:|---:|---:|---:|---|---|
+| 12 | 36 | 216.370 | 35.702 | 0.449 | 14.939 | 8 / 4 | PASS |
+| 16 | 48 | 249.563 | 35.501 | 4.595 | 15.181 | 8 / 8 | PASS |
+| 24 | 72 | 250.495 | 35.384 | 15.182 | 29.926 | 8 / 16 | PASS |
+| 32 | 96 | 256.625 | 35.161 | 18.205 | 44.645 | 8 / 24 | PASS |
+| 48 | 144 | 260.376 | 34.901 | 30.893 | 70.960 | 8 / 40 | PASS |
+| 64 | 192 | 265.349 | 34.887 | 46.281 | 98.401 | 8 / 56 | PASS |
+
+Full per-point data: [`data/http_concurrency_ladder_20260901.json`](data/http_concurrency_ladder_20260901.json).
+
+### Visualizations
+
+![Throughput summary (historical seqs=4 wave)](visualizations/qwen38-3090x2-throughput-x-card.png)
+
+The chart above is from the earlier **seqs=4** measurement wave. The C8 HTTP aggregate shown in that image (154.088 tok/s) is a **historical** value; see [Historical measurement](#historical-measurement-superseded-seqs4-config--do-not-use-as-current-recommendation) below. Do not treat it as the current recommended setting.
+
+![HTTP C192 admission result card (Japanese)](visualizations/qwen38-3090x2-http-c192-x-card.png)
+
+![HTTP C192 admission result card (English)](visualizations/qwen38-3090x2-http-c192-x-card-en.png)
+
+Historical C64 result cards (superseded by C192 confirmation above):
+
+![HTTP C64 admission result card (Japanese, historical)](visualizations/qwen38-3090x2-http-c64-x-card.png)
+
+![HTTP C64 admission result card (English, historical)](visualizations/qwen38-3090x2-http-c64-x-card-en.png)
+
+### Historical measurement (superseded, seqs=4 config — do not use as current recommendation)
+
+These values used `--max-num-seqs 4` and are **superseded**. They are not the current recommended launch flags.
 
 | Metric | Concurrency | Methodology | Result |
 |---|---:|---|---:|
@@ -130,15 +199,7 @@ Do not compute speedup ratios between these two methodologies.
 | Individual generation speed | C8 (8 concurrent requests) | median pure decode per request | **43.1 tok/s** (43.115 measured) |
 | HTTP effective total throughput | C8 | HTTP wave wall aggregate | **154.1 tok/s** (154.088 measured) |
 
-C8 was the **maximum concurrency measured in this wave**. It is not documented here as a hard implementation ceiling; higher concurrency was not tested.
-
 C2/C4 aggregate values from an earlier aggregation formula were withdrawn and must not be cited.
-
-### Visualizations
-
-![Throughput summary](visualizations/qwen38-3090x2-throughput-x-card.png)
-
-The chart shows per-request pure-decode speeds at C1/C2/C4/C6/C8 and the C8 HTTP wave wall aggregate as separate panels. Aggregate and per-request numbers are not directly comparable.
 
 ### 131072-token admission (single request)
 
@@ -209,7 +270,7 @@ If child worker processes remain, terminate the parent first; avoid killing unre
 
 1. **Do not mix measurement methodologies.** Per-request pure decode and HTTP wave wall aggregate answer different questions; never compare them with a single speedup ratio.
 2. **Do not cite withdrawn C2/C4 aggregate numbers.** Only per-request pure-decode values are valid for C2/C4.
-3. **C8 is a measured upper bound in this wave, not proven max concurrency.** Higher `C` was not tested.
+3. **Do not conflate HTTP concurrency with active GPU sequences.** The confirmed practical setting is HTTP C8 / active sequence 8. HTTP admission was explored up to C192 (formal 576/576 calls PASS, 0 client errors) with active sequences still capped at 8 and up to 184 requests queued; C192 is a confirmed explored upper bound, not a proven implementation ceiling, and is not the recommended everyday setting. C256 and above were not measured.
 4. **128K admission is a single-request probe.** Do not describe it as full-context guarantee for all traffic patterns.
 5. **Check free memory and swap before loading.** Abort or reduce concurrency if swap grows unexpectedly during load or benchmark waves.
 6. **Do not overlap heavyweight GPU work.** Avoid simultaneous large downloads, second model loads, or unrelated training jobs on the same GPUs.
@@ -222,5 +283,6 @@ If child worker processes remain, terminate the parent first; avoid killing unre
 - The underlying Qwen model family is credited to the original model authors. Verify upstream license terms separately.
 - The serving engine is [vLLM](https://github.com/vllm-project/vllm); verify the applicable engine license from its upstream source.
 - Benchmark measurements cited here come from model-lab PR #94 (`reports/out/3090_qwen38_speed_wave_20260831_0620/report.md`, 2026-08-31).
+- HTTP concurrency ladder measurements (C8 practical, C12–C64 historical admission, C96–C192 admission) additionally come from model-lab Issue #97 (`reports/out/3090_qwen38_parallel_issue97_20260831/report.md`, PR #110), Issue #109 (`reports/out/3090_qwen38_http_issue109_20260901/report.md`, PR #126), and Issue #128 (`reports/out/3090_qwen38_http_issue128_20260901/report.md`, PR #131), all merged to `main`.
 
 This recipe documentation does not redistribute model weights. Select a documentation license before public release if you fork this README.
