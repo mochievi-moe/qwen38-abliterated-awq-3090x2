@@ -1,0 +1,68 @@
+{
+  "source": "model-lab Issue #128 (mochievi-moe/model-lab, private), confirmed 2026-09-01",
+  "model": "Qwen3.8-27B Abliterated AWQ",
+  "engine": "vLLM 0.27.1",
+  "hardware": "2x RTX 3090 24GB, TP=2",
+  "fixed_config": {
+    "context_length": 131072,
+    "mtp": "off",
+    "max_num_seqs": 8,
+    "max_num_batched_tokens": 4096,
+    "kv_cache_dtype": "auto",
+    "output_tokens_per_call": 512
+  },
+  "warmup_per_point": 1,
+  "formal_waves_per_point": 3,
+  "tested_ceiling_c": 192,
+  "true_limit_reached": false,
+  "points": [
+    {
+      "http_concurrency": 96,
+      "all_calls": 384,
+      "formal_calls": 288,
+      "all_http_200": true,
+      "client_errors": 0,
+      "formal_median_pure_decode_tok_s": 34.86564661010735,
+      "formal_median_http_wave_effective_tps": 270.2190965690734,
+      "formal_batch_median_ttft_sec": 74.20359838148579,
+      "max_ttft_sec": 154.07653052406386,
+      "max_call_wall_sec": 163.44728079694323,
+      "max_running": 8,
+      "max_waiting": 88,
+      "max_kv_cache_usage": 0.13913043478260867,
+      "min_gpu_free_mib": 7687
+    },
+    {
+      "http_concurrency": 128,
+      "all_calls": 512,
+      "formal_calls": 384,
+      "all_http_200": true,
+      "client_errors": 0,
+      "formal_median_pure_decode_tok_s": 34.822215835036815,
+      "formal_median_http_wave_effective_tps": 271.0995590251942,
+      "formal_batch_median_ttft_sec": 98.41071464691777,
+      "max_ttft_sec": 204.56009016395546,
+      "max_call_wall_sec": 215.46054252400063,
+      "max_running": 8,
+      "max_waiting": 120,
+      "max_kv_cache_usage": 0.13913043478260867,
+      "min_gpu_free_mib": 7687
+    },
+    {
+      "http_concurrency": 192,
+      "all_calls": 768,
+      "formal_calls": 576,
+      "all_http_200": true,
+      "client_errors": 0,
+      "formal_median_pure_decode_tok_s": 34.80408517392071,
+      "formal_median_http_wave_effective_tps": 272.4665615469457,
+      "formal_batch_median_ttft_sec": 148.53735373099335,
+      "max_ttft_sec": 306.1134457080625,
+      "max_call_wall_sec": 317.1328009320423,
+      "max_running": 8,
+      "max_waiting": 184,
+      "max_kv_cache_usage": 0.13913043478260867,
+      "min_gpu_free_mib": 7687
+    }
+  ]
+}
