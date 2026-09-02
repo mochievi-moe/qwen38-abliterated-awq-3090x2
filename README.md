@@ -179,11 +179,13 @@ Full per-point data: [`data/http_concurrency_ladder_20260901.json`](data/http_co
 
 The chart above is from the earlier **seqs=4** measurement wave. The C8 HTTP aggregate shown in that image (154.088 tok/s) is a **historical** value; see [Historical measurement](#historical-measurement-superseded-seqs4-config--do-not-use-as-current-recommendation) below. Do not treat it as the current recommended setting.
 
-![HTTP C192 admission result card (Japanese)](visualizations/qwen38-3090x2-http-c192-x-card.png)
+These two cards were updated on 2026-09-02 to a consolidated view spanning all nine measured points, C12 through C192, combining the Issue #109 and Issue #128 measurement waves in one chart with a vertical line marking the run boundary between them. Underlying numbers are unchanged from the tables above.
 
-![HTTP C192 admission result card (English)](visualizations/qwen38-3090x2-http-c192-x-card-en.png)
+![HTTP admission result card, C12 through C192 (Japanese)](visualizations/qwen38-3090x2-http-c192-x-card.png)
 
-Historical C64 result cards (superseded by C192 confirmation above):
+![HTTP admission result card, C12 through C192 (English)](visualizations/qwen38-3090x2-http-c192-x-card-en.png)
+
+Historical single-run C64-only result cards (superseded by the consolidated C12–C192 card above):
 
 ![HTTP C64 admission result card (Japanese, historical)](visualizations/qwen38-3090x2-http-c64-x-card.png)
 
@@ -284,5 +286,6 @@ If child worker processes remain, terminate the parent first; avoid killing unre
 - The serving engine is [vLLM](https://github.com/vllm-project/vllm); verify the applicable engine license from its upstream source.
 - Benchmark measurements cited here come from model-lab PR #94 (`reports/out/3090_qwen38_speed_wave_20260831_0620/report.md`, 2026-08-31).
 - HTTP concurrency ladder measurements (C8 practical, C12–C64 historical admission, C96–C192 admission) additionally come from model-lab Issue #97 (`reports/out/3090_qwen38_parallel_issue97_20260831/report.md`, PR #110), Issue #109 (`reports/out/3090_qwen38_http_issue109_20260901/report.md`, PR #126), and Issue #128 (`reports/out/3090_qwen38_http_issue128_20260901/report.md`, PR #131), all merged to `main`.
+- The consolidated C12–C192 result cards above come from model-lab PR #134 (chart-only update, no new measurement data), merged to `main` on 2026-09-02.
 
 This recipe documentation does not redistribute model weights. Select a documentation license before public release if you fork this README.
